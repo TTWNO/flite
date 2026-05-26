@@ -48,7 +48,25 @@ There is no audio hardware in UEFI, so "output" = PCM/WAV buffer, not playback.
   varargs path. The shim must route this through a `vsnprintf`-style formatter to the UEFI
   console, not a plain string write.
 
-## Architecture (Approach A: whole-project transpile + std-backed libc shim)
+## PIVOT (2026-05-26): c2rust abandoned → cross-compile C for UEFI
+
+c2rust (local build `v0.22.1-520-g…`, LLVM 22) **hangs with unbounded memory** transpiling
+flite's synthesis-core files (`cst_features/cst_item/cst_relation/cst_synth/cst_cg`) — a
+super-linear/non-terminating bug in its CFG/type handling (root-caused by bisection; no flag
+fixes it; prime suspect: post-release commit "Flip comparison operators when negating in CFG").
+See memory `c2rust-hangs-on-flite`. Per user decision, the port no longer transpiles flite.
+
+**Revised approach:** cross-compile flite's C directly for the UEFI target and back its runtime
+with Rust. Verified: `clang --target=x86_64-unknown-uefi -ffreestanding -mno-red-zone
+-fshort-wchar` produces **COFF x86-64** objects, predefines `__UEFI__` (NOT `_WIN32`), so flite
+takes its generic header branches. These objects link with Rust's `x86_64-unknown-uefi` output
+(also COFF/Win64 ABI). flite's `extern "C"` symbols resolve against a Rust `libc_shim`
+(alloc→`std`, math→`libm` crate, mem/str→`core`, stdio/file/socket→stubs, console for errmsg).
+Minimal shim headers in `uefi-port/cinclude/` satisfy `<stdio.h>/<stdlib.h>/<string.h>/<math.h>/
+<ctype.h>/<unistd.h>` (clang gives stddef/stdint/stdarg/limits/float freestanding).
+The libc_shim, UEFI app, QEMU run, and WAV-to-ESP steps are unchanged from the original plan.
+
+## Architecture (ORIGINAL — Approach A: whole-project transpile + std-backed libc shim — SUPERSEDED by pivot above)
 
 ### Pipeline
 1. **Native build for capture.** `./configure --with-audio=none` (drops alsa/pulse/socket
