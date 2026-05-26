@@ -301,19 +301,21 @@ unsafe fn vformat(mut sink: Sink, fmt: *const c_char, mut args: VaList) -> c_int
             }
         }
 
-        // length modifiers — track 64-bit width (l/ll/z/j/t/q on this LP64-ish
-        // target; UEFI x86_64 has 32-bit long, but flite uses %ld rarely; we
-        // treat `l`/`ll`/`z` as 64-bit which matches `long`/`size_t` on the
-        // host where these formats originate, and is harmless here).
-        let mut long = false;
+        // length modifiers. On x86_64-unknown-uefi (IL32P64/Win64) `long` is
+        // 32-bit, so a single `l` reads a 32-bit arg; `ll` is 64-bit, and
+        // `z`/`j`/`t`/`q` (size_t/intmax_t/ptrdiff_t) are 64-bit. Reading the
+        // wrong width would pick up caller-garbage in the high bits and
+        // misalign subsequent args, so count the `l`s rather than collapse them.
+        let mut l_count = 0u8;
+        let mut width64 = false;
         loop {
             match *fmt.add(i) as u8 {
                 b'l' => {
-                    long = true;
+                    l_count += 1;
                     i += 1;
                 }
                 b'z' | b'j' | b't' | b'q' => {
-                    long = true;
+                    width64 = true;
                     i += 1;
                 }
                 b'h' | b'L' => {
@@ -322,6 +324,7 @@ unsafe fn vformat(mut sink: Sink, fmt: *const c_char, mut args: VaList) -> c_int
                 _ => break,
             }
         }
+        let long = width64 || l_count >= 2;
 
         let conv = *fmt.add(i) as u8;
         i += 1;

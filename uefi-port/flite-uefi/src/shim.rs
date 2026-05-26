@@ -351,7 +351,9 @@ pub extern "C" fn abs(n: c_int) -> c_int {
 
 #[no_mangle]
 pub unsafe extern "C" fn atoi(s: *const c_char) -> c_int {
-    atoi_inner(s) as c_int
+    // Clamp to int range (C `atoi` overflow is UB; glibc saturates). Matters for
+    // long numeric input from text normalization.
+    atoi_inner(s).clamp(c_int::MIN as i64, c_int::MAX as i64) as c_int
 }
 
 unsafe fn atoi_inner(s: *const c_char) -> i64 {
@@ -376,7 +378,8 @@ unsafe fn atoi_inner(s: *const c_char) -> i64 {
     loop {
         let c = *s.add(i) as u8;
         if c.is_ascii_digit() {
-            val = val.wrapping_mul(10).wrapping_add((c - b'0') as i64);
+            // Saturate at i64 bounds; atoi() then clamps to int range.
+            val = val.saturating_mul(10).saturating_add((c - b'0') as i64);
             i += 1;
         } else {
             break;
