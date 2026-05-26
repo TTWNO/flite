@@ -18,7 +18,11 @@ There is no audio hardware in UEFI, so "output" = PCM/WAV buffer, not playback.
 - **Runtime deps:** Use the UEFI target's **prebuilt `std`** (provides a global allocator
   backed by Boot Services `AllocatePool`); use the **`libm` crate** for math functions.
 - **Error handling:** Compile flite with `-DDIE_ON_ERROR`. This makes `cst_error()` expand
-  to `abort()` and removes `#include <setjmp.h>` / `longjmp` entirely. No setjmp shim needed.
+  to `abort()` and removes `#include <setjmp.h>` / `longjmp` from `cst_error.h` entirely. No
+  setjmp shim needed. **One small source edit is required:** `src/utils/cst_error.c:95`
+  unconditionally declares `jmp_buf *cst_errjmp = 0;`, which fails to compile once the header
+  no longer pulls in `<setjmp.h>`. Guard that line under `#ifndef DIE_ON_ERROR` (mirroring the
+  existing `WASM32_WASI` guard). This is a tracked task at checkpoint 1, not free.
 
 ## Verified facts
 
@@ -29,7 +33,12 @@ There is no audio hardware in UEFI, so "output" = PCM/WAV buffer, not playback.
   NOT depend on the `libc` crate) → we must *provide* these symbols at link time.
 - libc usage is centralized: `src/utils/cst_alloc.c` (alloc) and `cst_file_*.c` (file I/O).
 - `cst_error()` is a macro; with `-DDIE_ON_ERROR` it is just `abort()`. The `cst_errjmp`
-  catch path is only used by server/main code we are not building.
+  catch path is only used by server/main code we are not building, BUT `cst_error.c:95`
+  declares `jmp_buf *cst_errjmp = 0;` unconditionally → needs a `#ifndef DIE_ON_ERROR` guard
+  (verified: compile fails with the flag, succeeds without).
+- `cst_errmsg`/`cst_dbgmsg` use `vfprintf(stderr, fmt, args)` (`cst_error.c:104`) — a real
+  varargs path. The shim must route this through a `vsnprintf`-style formatter to the UEFI
+  console, not a plain string write.
 
 ## Architecture (Approach A: whole-project transpile + std-backed libc shim)
 
@@ -48,7 +57,8 @@ There is no audio hardware in UEFI, so "output" = PCM/WAV buffer, not playback.
    - `stdio`/file/`socket`/`exit` → stubs (panic/no-op; not exercised by CG-from-ROM path).
    - `abort` → panic; `cst_errmsg`/`cst_dbgmsg` → write to UEFI console.
 4. **UEFI entry crate** (`std` EFI app): `flite_init()` → `register_cmu_us_slt(NULL)` →
-   `flite_text_to_wave(voice, "hello world")` → `cst_wave` PCM. Write `.wav` to the ESP via
+   `flite_text_to_wave("hello world", voice)` → `cst_wave` PCM.
+   (Signature: `cst_wave *flite_text_to_wave(const char *text, cst_voice *voice)` — text first.) Write `.wav` to the ESP via
    UEFI Simple File System protocol; print sample count to the UEFI console.
 5. **Build & run.** `cargo build --target x86_64-unknown-uefi`; assemble an ESP image
    (`BOOTX64.EFI`); run under QEMU + OVMF; capture console output and the produced `.wav`.
