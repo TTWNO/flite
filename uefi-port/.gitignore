@@ -1,1 +1,3 @@
-obj/
+esp/
+*.log
+flite-uefi/target/

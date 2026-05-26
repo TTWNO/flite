@@ -94,23 +94,14 @@ pub unsafe extern "C" fn free(ptr: *mut c_void) {
 // mem / str
 // ---------------------------------------------------------------------------
 
-#[no_mangle]
-pub unsafe extern "C" fn memcpy(dst: *mut c_void, src: *const c_void, n: usize) -> *mut c_void {
-    core::ptr::copy_nonoverlapping(src as *const u8, dst as *mut u8, n);
-    dst
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn memmove(dst: *mut c_void, src: *const c_void, n: usize) -> *mut c_void {
-    core::ptr::copy(src as *const u8, dst as *mut u8, n);
-    dst
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn memset(dst: *mut c_void, c: c_int, n: usize) -> *mut c_void {
-    core::ptr::write_bytes(dst as *mut u8, c as u8, n);
-    dst
-}
+// NOTE: memcpy / memmove / memset are intentionally NOT defined here.
+// `compiler-builtins` (linked into every Rust program) already provides correct
+// C-callable `memcpy`/`memmove`/`memset`/`memcmp`/`strlen` for freestanding
+// targets like x86_64-unknown-uefi. Defining our own from
+// `core::ptr::copy_nonoverlapping`/`write_bytes` is a trap: those intrinsics
+// lower *back* into calls to `memcpy`/`memset`, so our versions recursed
+// infinitely and overflowed the stack during std startup. Let compiler-builtins
+// own them; flite's C archive links against those.
 
 #[no_mangle]
 pub unsafe extern "C" fn strlen(s: *const c_char) -> usize {
