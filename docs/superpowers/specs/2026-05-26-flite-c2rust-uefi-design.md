@@ -24,6 +24,14 @@ There is no audio hardware in UEFI, so "output" = PCM/WAV buffer, not playback.
   no longer pulls in `<setjmp.h>`. Guard that line under `#ifndef DIE_ON_ERROR` (mirroring the
   existing `WASM32_WASI` guard). This is a tracked task at checkpoint 1, not free.
 
+## Environment (verified)
+
+- Output location: a new in-repo subdir **`uefi-port/`** (holds `flite-rs/` transpiled crate,
+  `libc_shim`, `uefi-app`) on branch `flite-c2rust-uefi`.
+- QEMU 11.0.0 present (`qemu-system-x86_64`); OVMF firmware at
+  `/usr/share/edk2/x64/OVMF_CODE.4m.fd` + `OVMF_VARS.4m.fd` (split) — no installs needed.
+- `compiledb` present (`~/.local/bin/compiledb`) for capturing `compile_commands.json`.
+
 ## Verified facts
 
 - Toolchain present: c2rust 0.22.1, nightly rustc 1.97, `x86_64-unknown-uefi` target installed.
