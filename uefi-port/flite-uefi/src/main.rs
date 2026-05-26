@@ -7,6 +7,7 @@
 
 mod cprintf;
 mod shim;
+mod wav;
 
 use core::ffi::{c_char, c_int, c_void};
 
@@ -57,8 +58,41 @@ fn main() {
         } else {
             println!("FLITE-UEFI: SYNTHESIS PRODUCED NO SAMPLES");
         }
+
+        let buf = wav::wave_to_wav(w);
+        println!("FLITE-UEFI: wav bytes={}", buf.len());
+        write_wav(&buf);
     }
     halt();
+}
+
+/// Try to write the WAV to the ESP and read it back (the read-back proves the
+/// write independent of QEMU's host write-back). Probes a few path spellings
+/// because UEFI std path semantics are not well documented.
+fn write_wav(buf: &[u8]) {
+    for path in ["hello.wav", "\\hello.wav", "/hello.wav"] {
+        match std::fs::write(path, buf) {
+            Ok(()) => {
+                println!("FLITE-UEFI: wrote {:?} ({} bytes)", path, buf.len());
+                match std::fs::read(path) {
+                    Ok(rb) => {
+                        let magic = &rb[..rb.len().min(4)];
+                        println!(
+                            "FLITE-UEFI: readback {:?} ok, {} bytes, magic={:?}",
+                            path,
+                            rb.len(),
+                            core::str::from_utf8(magic).unwrap_or("?")
+                        );
+                        println!("FLITE-UEFI: WAV WRITE OK");
+                        return;
+                    }
+                    Err(e) => println!("FLITE-UEFI: readback {:?} failed: {}", path, e),
+                }
+            }
+            Err(e) => println!("FLITE-UEFI: write {:?} failed: {}", path, e),
+        }
+    }
+    println!("FLITE-UEFI: WAV WRITE FAILED (all paths)");
 }
 
 /// Spin forever so the single run's console output stays put (QEMU is killed by
