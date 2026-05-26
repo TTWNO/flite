@@ -1,0 +1,17 @@
+[package]
+name = "flite-uefi"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "flite-uefi"
+path = "src/main.rs"
+
+[dependencies]
+libm = "0.2"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
