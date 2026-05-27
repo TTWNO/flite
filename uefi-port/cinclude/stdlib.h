@@ -5,7 +5,10 @@
 
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
-#define RAND_MAX     32767
+/* Must match the range of the shim's rand() (0 .. 2^31-1). flite's mixed-
+ * excitation code does `rand() > RAND_MAX/2.0`, so a too-small RAND_MAX makes
+ * that test always true and silences the synthesis. */
+#define RAND_MAX     2147483647
 
 #ifndef NULL
 #define NULL ((void *)0)

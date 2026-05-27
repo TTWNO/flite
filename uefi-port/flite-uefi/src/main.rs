@@ -3,7 +3,8 @@
 //! (`libflite_uefi.a`) and provides the C runtime/libc surface it needs.
 //!
 //! It registers the compiled-in `cmu_us_slt` clustergen voice, synthesizes a
-//! line of text to PCM, and reports the result on the UEFI console.
+//! line of text to PCM, and reports the result on the UEFI console, then writes
+//! the WAV to the EFI System Partition.
 
 mod cprintf;
 mod shim;
@@ -34,16 +35,12 @@ fn main() {
     println!("FLITE-UEFI: start");
     unsafe {
         flite_init();
-        println!("FLITE-UEFI: flite_init done");
         let voice = register_cmu_us_slt(core::ptr::null());
-        println!("FLITE-UEFI: register_cmu_us_slt done ({:p})", voice);
         if voice.is_null() {
             println!("FAIL: register_cmu_us_slt returned NULL");
             return;
         }
-        println!("FLITE-UEFI: calling flite_text_to_wave");
         let w = flite_text_to_wave(TEXT.as_ptr() as *const c_char, voice);
-        println!("FLITE-UEFI: flite_text_to_wave returned ({:p})", w);
         if w.is_null() {
             println!("FAIL: flite_text_to_wave returned NULL");
             return;
@@ -69,9 +66,9 @@ fn main() {
     println!("FLITE-UEFI: done — returning control to firmware");
 }
 
-/// Try to write the WAV to the ESP and read it back (the read-back proves the
-/// write independent of QEMU's host write-back). Probes a few path spellings
-/// because UEFI std path semantics are not well documented.
+/// Write the WAV to the ESP and read it back (the read-back proves the write
+/// independent of QEMU's host write-back). Probes a few path spellings because
+/// UEFI std path semantics are not well documented.
 fn write_wav(buf: &[u8]) {
     for path in ["hello.wav", "\\hello.wav", "/hello.wav"] {
         match std::fs::write(path, buf) {

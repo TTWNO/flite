@@ -70,3 +70,10 @@ if [ ${#FAILED[@]} -gt 0 ]; then
 fi
 
 echo "All files compiled successfully."
+
+# Archive the objects into the static library the Rust crate links against.
+# (Without this the crate links a stale archive and C-side changes are ignored.)
+ARCHIVE="$SCRIPT_DIR/libflite_uefi.a"
+rm -f "$ARCHIVE"
+llvm-ar rcs "$ARCHIVE" "$OBJ_DIR"/*.o
+echo "Archived $(llvm-ar t "$ARCHIVE" | wc -l) objects into $ARCHIVE"
