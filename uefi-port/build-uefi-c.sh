@@ -15,6 +15,7 @@ mkdir -p "$OBJ_DIR"
 
 CLANG_FLAGS=(
     "--target=x86_64-unknown-uefi"
+    "-fno-builtin"
     "-ffreestanding"
     "-mno-red-zone"
     "-fshort-wchar"

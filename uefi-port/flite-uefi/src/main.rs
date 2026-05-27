@@ -1,9 +1,6 @@
 #![feature(c_variadic)]
 //! flite-uefi: a UEFI application that links the cross-compiled flite C archive
 //! (`libflite_uefi.a`) and provides the C runtime/libc surface it needs.
-//!
-//! Registers the compiled-in `cmu_us_slt` clustergen voice, synthesizes a line
-//! of text to PCM, reports on the UEFI console, and writes a WAV to the ESP.
 
 mod cprintf;
 mod shim;
@@ -53,18 +50,13 @@ fn main() {
         } else {
             println!("FLITE-UEFI: SYNTHESIS PRODUCED NO SAMPLES");
         }
-
         let buf = wav::wave_to_wav(w);
         println!("FLITE-UEFI: wav bytes={}", buf.len());
         write_wav(&buf);
     }
-    // Return to the firmware boot manager (EFI_SUCCESS); do not spin (that would
-    // stall/lock on real hardware after the work completes).
     println!("FLITE-UEFI: done — returning control to firmware");
 }
 
-/// Write the WAV to the ESP and read it back to confirm. Probes a few path
-/// spellings because UEFI std path semantics are not well documented.
 fn write_wav(buf: &[u8]) {
     for path in ["hello.wav", "\\hello.wav", "/hello.wav"] {
         match std::fs::write(path, buf) {

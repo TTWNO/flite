@@ -473,5 +473,10 @@
     "command": "cc -c -I../../lang/usenglish -I../../lang/cmulex -I../../include -g -O2 -fPIC -DDIE_ON_ERROR -Wall -o ../../build/x86_64-linux-gnu/obj/lang/cmu_us_slt/cmu_us_slt_spamf0_accent_params.o cmu_us_slt_spamf0_accent_params.c",
     "directory": "/home/tait/Documents/flite/lang/cmu_us_slt",
     "file": "/home/tait/Documents/flite/lang/cmu_us_slt/cmu_us_slt_spamf0_accent_params.c"
+  },
+  {
+    "command": "cc -c math_bridge.c",
+    "directory": "/home/tait/Documents/flite/uefi-port",
+    "file": "/home/tait/Documents/flite/uefi-port/math_bridge.c"
   }
 ]

@@ -294,40 +294,48 @@ pub extern "C" fn toupper(c: c_int) -> c_int {
 }
 
 // ---------------------------------------------------------------------------
-// math (via libm)
+// math (via libm), accessed through a bit-transport bridge
 // ---------------------------------------------------------------------------
+//
+// Rust's x86_64-unknown-uefi ABI passes/returns f64 in INTEGER registers (it
+// avoids SSE), but clang (which compiles flite) uses XMM0 per the MS x64 ABI.
+// So a clang `double f(double)` call cannot exchange f64 with a Rust
+// `extern "C"/win64 fn(f64)` — the bits land in the wrong register file.
+// Integer args/returns DO match, so the C side (math_bridge.c, clang) passes
+// the f64 *bit pattern* as u64 to these functions and reinterprets the u64
+// result. f64<->u64 transmute is via to_bits/from_bits.
 
 #[no_mangle]
-pub extern "C" fn ceil(x: f64) -> f64 {
-    libm::ceil(x)
+pub extern "C" fn rust_ceil_bits(x: u64) -> u64 {
+    libm::ceil(f64::from_bits(x)).to_bits()
 }
 #[no_mangle]
-pub extern "C" fn exp(x: f64) -> f64 {
-    libm::exp(x)
+pub extern "C" fn rust_exp_bits(x: u64) -> u64 {
+    libm::exp(f64::from_bits(x)).to_bits()
 }
 #[no_mangle]
-pub extern "C" fn fabs(x: f64) -> f64 {
-    libm::fabs(x)
+pub extern "C" fn rust_fabs_bits(x: u64) -> u64 {
+    libm::fabs(f64::from_bits(x)).to_bits()
 }
 #[no_mangle]
-pub extern "C" fn fmod(x: f64, y: f64) -> f64 {
-    libm::fmod(x, y)
+pub extern "C" fn rust_fmod_bits(x: u64, y: u64) -> u64 {
+    libm::fmod(f64::from_bits(x), f64::from_bits(y)).to_bits()
 }
 #[no_mangle]
-pub extern "C" fn log(x: f64) -> f64 {
-    libm::log(x)
+pub extern "C" fn rust_log_bits(x: u64) -> u64 {
+    libm::log(f64::from_bits(x)).to_bits()
 }
 #[no_mangle]
-pub extern "C" fn pow(x: f64, y: f64) -> f64 {
-    libm::pow(x, y)
+pub extern "C" fn rust_pow_bits(x: u64, y: u64) -> u64 {
+    libm::pow(f64::from_bits(x), f64::from_bits(y)).to_bits()
 }
 #[no_mangle]
-pub extern "C" fn sin(x: f64) -> f64 {
-    libm::sin(x)
+pub extern "C" fn rust_sin_bits(x: u64) -> u64 {
+    libm::sin(f64::from_bits(x)).to_bits()
 }
 #[no_mangle]
-pub extern "C" fn sqrt(x: f64) -> f64 {
-    libm::sqrt(x)
+pub extern "C" fn rust_sqrt_bits(x: u64) -> u64 {
+    libm::sqrt(f64::from_bits(x)).to_bits()
 }
 
 // ---------------------------------------------------------------------------
@@ -392,10 +400,13 @@ unsafe fn atoi_inner(s: *const c_char) -> i64 {
     }
 }
 
+/// Returns the f64 bit pattern (see the math bridge note); the C side
+/// (math_bridge.c `cstm_atof`) reinterprets it. `atof` returns f64, which the
+/// Rust/UEFI ABI would otherwise hand back in the wrong register file.
 #[no_mangle]
-pub unsafe extern "C" fn atof(s: *const c_char) -> f64 {
+pub unsafe extern "C" fn rust_atof_bits(s: *const c_char) -> u64 {
     if s.is_null() {
-        return 0.0;
+        return 0.0f64.to_bits();
     }
     // Collect a parseable prefix into a small stack buffer, then use Rust's parser.
     let mut buf = [0u8; 64];
@@ -443,10 +454,11 @@ pub unsafe extern "C" fn atof(s: *const c_char) -> f64 {
             break;
         }
     }
-    match core::str::from_utf8(&buf[..n]) {
+    let v: f64 = match core::str::from_utf8(&buf[..n]) {
         Ok(st) => st.parse::<f64>().unwrap_or(0.0),
         Err(_) => 0.0,
-    }
+    };
+    v.to_bits()
 }
 
 #[inline]

@@ -1,6 +1,19 @@
 #ifndef _UEFI_SHIM_MATH_H_
 #define _UEFI_SHIM_MATH_H_
 
+
+/* Route these to the shim's uniquely-named implementations. compiler_builtins
+   exports WEAK sqrt/exp/log/pow/sin/cos/fmod/ceil/fabs symbols that otherwise
+   hijack flite's calls (and are wrong on this target), so we bypass them. */
+#define exp   cstm_exp
+#define log   cstm_log
+#define pow   cstm_pow
+#define sqrt  cstm_sqrt
+#define sin   cstm_sin
+#define fmod  cstm_fmod
+#define ceil  cstm_ceil
+#define fabs  cstm_fabs
+
 #define M_PI   3.14159265358979323846
 #define HUGE_VAL (__builtin_huge_val())
 

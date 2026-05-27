@@ -26,7 +26,8 @@ void   exit(int status);
 
 /* String/number conversion */
 int    atoi(const char *s);
-double atof(const char *s);
+double cstm_atof(const char *s);
+#define atof cstm_atof
 double strtod(const char *s, char **endptr);
 long   strtol(const char *s, char **endptr, int base);
 
