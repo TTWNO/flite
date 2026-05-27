@@ -39,14 +39,14 @@ fn main() {
         println!("FLITE-UEFI: register_cmu_us_slt done ({:p})", voice);
         if voice.is_null() {
             println!("FAIL: register_cmu_us_slt returned NULL");
-            halt();
+            return;
         }
         println!("FLITE-UEFI: calling flite_text_to_wave");
         let w = flite_text_to_wave(TEXT.as_ptr() as *const c_char, voice);
         println!("FLITE-UEFI: flite_text_to_wave returned ({:p})", w);
         if w.is_null() {
             println!("FAIL: flite_text_to_wave returned NULL");
-            halt();
+            return;
         }
         let w = &*w;
         println!(
@@ -63,7 +63,10 @@ fn main() {
         println!("FLITE-UEFI: wav bytes={}", buf.len());
         write_wav(&buf);
     }
-    halt();
+    // Return to the firmware boot manager (EFI_SUCCESS). Do NOT spin here: on
+    // real hardware there is no external timeout, so an infinite loop would
+    // appear as a stall/lock right after the work completes.
+    println!("FLITE-UEFI: done — returning control to firmware");
 }
 
 /// Try to write the WAV to the ESP and read it back (the read-back proves the
@@ -93,12 +96,4 @@ fn write_wav(buf: &[u8]) {
         }
     }
     println!("FLITE-UEFI: WAV WRITE FAILED (all paths)");
-}
-
-/// Spin forever so the single run's console output stays put (QEMU is killed by
-/// an external timeout). Avoids the boot manager re-launching BOOTX64.EFI.
-fn halt() -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
 }
