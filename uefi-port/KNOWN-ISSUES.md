@@ -28,15 +28,32 @@ same code). **This reproduces in QEMU — it is NOT hardware-specific.** (An ear
    host but "0" (word-internal) on UEFI, because `item_next()` on a syllable
    differs — i.e. **the utterance relation (syllable) structure is built
    differently** on UEFI.
-4. So the defect is upstream, in flite's text-analysis / HRG construction, where
-   some `long`-typed value (or `long`-dependent computation) behaves differently
-   at 32-bit. The exact source line is not yet pinned.
+4. The duration difference comes from flite's **item/relation graph** (HRG): the
+   `nn` (next-next) navigation in the **Syllable** relation returns a different
+   item on UEFI. Verified by step-by-step tracing:
+   - The utterance structure is *identical* on both (10 segments, 3 syllables,
+     2 words, phones `[pau hh ax l ow w er l d pau]`, syllable sizes [2,2,4]).
+   - Per-syllable `cg_break` is identical: [0, 1, 4].
+   - For the diverging segstate (`hh_81`, syllable 0), `R:…R:Syllable` lands in
+     relation `"Syllable"` on **both**, and the syllable's own break is 0 on both.
+   - But `item_next(item_next(syl0))` in the Syllable relation yields syllable 2
+     (break **4**) on host and a break-**0** item on UEFI — i.e. the Syllable
+     relation's `n`-pointer chain reached via the feature path is **inconsistent
+     with the same relation's clean head-walk** (which has 3 distinct items on
+     both). This is a deterministic linkage corruption of the relation graph that
+     only appears at `long`=32.
+5. **AddressSanitizer on the host build is clean** (no overflow/UAF), so the bug
+   does not manifest as an out-of-bounds access at `long`=64 — it is specific to
+   the 32-bit-`long` (LLP64) data model and is invisible to host tooling.
 
-**To finish the fix:** find the LP64 assumption in the tokenization / lexicon /
-syllabification / feature code (`src/synth`, `src/hrg`, `src/utils`, `lang/…`) —
-e.g. a value stored in a `long` that needs 64 bits, or `sizeof(long)` used as a
-field width — and use a fixed-width type. Reproduce by compiling those files for
-a 32-bit-`long` model. A host build with clang is the known-good reference.
+**To finish the fix:** the defect is a deterministic, LLP64-specific corruption
+of the HRG item/relation `n`/`p` linkage built during text analysis
+(`src/hrg/cst_{item,relation,utterance}.c`, `src/synth/cst_ffeatures.c`,
+`src/utils/cst_features.c`). Since host ASan can't see it, the practical next
+step is to **attach gdb to QEMU** (`-s -S`, target `x86_64-unknown-uefi`) and
+inspect the Syllable relation's `n` pointers right after utterance construction,
+or audit those files for any `long`/`sizeof(long)`/pointer-through-`long` use in
+the linkage. A clang **host** build is the known-good reference.
 
 **Mitigation idea (not implemented):** the pre-MLPG cluster means are correct
 (loud); running synthesis with `do_mlpg` disabled would produce louder, if
