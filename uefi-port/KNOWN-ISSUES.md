@@ -46,6 +46,18 @@ same code). **This reproduces in QEMU — it is NOT hardware-specific.** (An ear
    does not manifest as an out-of-bounds access at `long`=64 — it is specific to
    the 32-bit-`long` (LLP64) data model and is invisible to host tooling.
 
+6. **It is a layout-sensitive Heisenbug.** Probing perturbs it: calling
+   `item_as`/`path_to_item` from instrumentation lazily creates/caches relation
+   mappings and makes the divergence disappear at the probe point, while the
+   *stable, instrumentation-independent* symptoms (num_samples 17840 vs 19760;
+   peak amplitude ~47 vs ~21000) persist. Individually verified **identical** on
+   host and UEFI and therefore NOT the cause: the shim `atof` (`atof("4")`=4 on
+   both), `"…".parse::<f64>()` (`Ok(4.0)` on UEFI), `cg_break`'s branch logic
+   (branch 4 on both when observed non-invasively), the utterance structure, and
+   the const-val table. The corruption only manifests in the *un-probed* control
+   flow — classic memory corruption whose effect depends on heap/object layout,
+   which differs at `long`=32.
+
 **To finish the fix:** the defect is a deterministic, LLP64-specific corruption
 of the HRG item/relation `n`/`p` linkage built during text analysis
 (`src/hrg/cst_{item,relation,utterance}.c`, `src/synth/cst_ffeatures.c`,
