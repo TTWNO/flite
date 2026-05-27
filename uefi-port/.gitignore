@@ -2,3 +2,4 @@ esp/
 obj/
 *.log
 flite-uefi/target/
+consumer-demo/target/

@@ -3,9 +3,8 @@ name = "flite-uefi"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "flite-uefi"
-path = "src/main.rs"
+[lib]
+name = "flite_uefi"
 
 [dependencies]
 libm = "0.2"

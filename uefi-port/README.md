@@ -1,16 +1,47 @@
 # Flite on `x86_64-unknown-uefi`
 
-This directory builds [flite](https://github.com/festvox/flite) into a **UEFI
-application** that synthesizes text to PCM and writes a `.wav` to the EFI System
-Partition — running in firmware, with no operating system. It is a
-proof-of-concept / curiosity, **not** something intended for upstream flite.
+This directory builds [flite](https://github.com/festvox/flite) into a **Rust
+library** (`flite-uefi`) that runs the CMU flite TTS engine on the UEFI target —
+in firmware, with no operating system. Your own UEFI binary depends on the
+library, synthesizes text to PCM, and feeds the samples to its audio driver. It
+is a proof-of-concept / curiosity, **not** something intended for upstream flite.
 
 ## What it does
 
-`flite-uefi.efi` registers the compiled-in `cmu_us_slt` clustergen voice,
-synthesizes `"hello world"` to 16-bit 16 kHz mono PCM, prints the sample count
-to the UEFI console, and writes `hello.wav` to the ESP (verified by reading it
-back in-firmware). Demonstrated under QEMU + OVMF.
+`flite-uefi` is a library crate that registers the compiled-in `cmu_us_slt`
+clustergen voice and synthesizes text to 16-bit 16 kHz mono PCM. Two binaries
+demonstrate it: `examples/synth.rs` (writes `hello.wav` to the ESP, used by the
+QEMU test) and `consumer-demo/` (a *separate* crate showing how to depend on the
+library from your own app). Demonstrated under QEMU + OVMF.
+
+## Using the library
+
+Depend on it by path and call the small safe API:
+
+```toml
+# your-app/Cargo.toml
+[dependencies]
+flite-uefi = { path = "../path/to/uefi-port/flite-uefi" }
+[profile.dev]
+panic = "abort"
+[profile.release]
+panic = "abort"
+```
+
+```rust
+let voice = flite_uefi::init().expect("voice registration");
+let wave  = voice.synthesize("hello world").expect("synthesis");
+let pcm: &[i16] = wave.samples();       // interleaved 16-bit signed PCM
+let rate        = wave.sample_rate();    // Hz
+let channels    = wave.num_channels();
+// hand `pcm` to your audio driver; or `wave.to_wav()` for RIFF/WAVE bytes.
+```
+
+Build your app with nightly for the UEFI target:
+`cargo build --target x86_64-unknown-uefi`. No `#![feature(...)]` is needed in
+your crate — the `c_variadic` feature is internal to the library. The flite C
+archive (`libflite_uefi.a`) must exist next to the library crate; `build.rs`
+finds it relative to the crate, so it works as a dependency.
 
 ## How it works (and why not c2rust)
 
@@ -77,9 +108,9 @@ bash uefi-port/native-test.sh   # => num_samples=... NATIVE OK
 #    (uefi-port/libflite_uefi.a is checked in; this regenerates it.)
 bash uefi-port/build-uefi-c.sh  # => uefi-port/libflite_uefi.a
 
-# 4. Build the EFI application.
+# 4. Build the demo EFI application (the `synth` example of the library).
 cd uefi-port/flite-uefi
-cargo +nightly build --target x86_64-unknown-uefi
+cargo +nightly build --example synth --target x86_64-unknown-uefi
 cd ../..
 
 # 5. Run it under QEMU + OVMF (prints to the console, writes hello.wav).
@@ -89,10 +120,10 @@ bash uefi-port/run-qemu.sh        # optional arg: timeout seconds (default 30)
 Expected console output:
 
 ```
-FLITE-UEFI: num_samples=17840 sample_rate=16000 num_channels=1
+FLITE-UEFI: num_samples=19760 sample_rate=16000 num_channels=1
 FLITE-UEFI: SYNTHESIS OK
-FLITE-UEFI: wrote "hello.wav" (35724 bytes)
-FLITE-UEFI: readback "hello.wav" ok, 35724 bytes, magic="RIFF"
+FLITE-UEFI: wrote "hello.wav" (39564 bytes)
+FLITE-UEFI: readback "hello.wav" ok, 39564 bytes, magic="RIFF"
 FLITE-UEFI: WAV WRITE OK
 ```
 
@@ -110,8 +141,9 @@ after the run the produced file is on the host at
 | `compile_commands.json` | The flite C file set (core + usenglish + cmulex + cmu_us_slt), audio/socket excluded. |
 | `libflite_uefi.a` | Checked-in COFF archive (regenerate with `build-uefi-c.sh`). |
 | `uefi-undefined-symbols.txt` | The external C-runtime symbols the Rust shim provides. |
-| `flite-uefi/` | The Rust `std` EFI app: `shim.rs`, `cprintf.rs`, `wav.rs`, `main.rs`. |
-| `run-qemu.sh` | Assembles an ESP and boots the app in QEMU + OVMF. |
+| `flite-uefi/` | The Rust **library**: `lib.rs` (public API), `shim.rs` (C runtime), `cprintf.rs`, `wav.rs`, `math_bridge.c` (f64 ABI bridge), and `examples/synth.rs` (the demo). |
+| `consumer-demo/` | A *separate* crate depending on `flite-uefi` — the template for your own audio-driver binary. |
+| `run-qemu.sh` | Assembles an ESP and boots the `synth` example in QEMU + OVMF. |
 | `native-test.{c,sh}` | Host sanity check of the C library + voice. |
 | `hello-uefi.wav` | Reference output produced by the UEFI app. |
 

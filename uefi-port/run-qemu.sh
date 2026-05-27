@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-EFI=flite-uefi/target/x86_64-unknown-uefi/debug/flite-uefi.efi
+EFI=flite-uefi/target/x86_64-unknown-uefi/debug/examples/synth.efi
 ESP=esp
 TIMEOUT="${1:-30}"
 
