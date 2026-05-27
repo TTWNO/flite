@@ -58,6 +58,24 @@ same code). **This reproduces in QEMU — it is NOT hardware-specific.** (An ear
    flow — classic memory corruption whose effect depends on heap/object layout,
    which differs at `long`=32.
 
+### Update (additional experiments, all negative)
+
+- **`long` width is NOT the cause.** Widened every `long`→`long long` (64-bit on
+  all x86_64 ABIs) across the CG/MLPG/text/structure files (`cst_vc.{c,h}`,
+  `cst_mlpg.{c,h}`, `cst_mlsa.{c,h}`, `cst_tokenstream.c`, `us_text.c`, …) and
+  rebuilt: **no change** (num_samples 17840, peak 48). So this is not the LP64↔
+  LLP64 `long` issue. Reverted.
+- **No masked declarations:** compiling without `-Wno-implicit-function-declaration`
+  / `-Wno-int-conversion` produces zero implicit-declaration or pointer-truncation
+  warnings — nothing is being silently mis-typed.
+- **Localized to MLPG:** with MLPG *disabled* (forced non-MLPG path), host=215 and
+  UEFI=507 (both quiet, same ballpark); with MLPG *enabled*, host=21077 but
+  UEFI=48. So MLPG is essential for loudness and is exactly where UEFI diverges —
+  but it is fed a different frame sequence because **durations also differ**
+  (17840 vs 19760), which traces back to the same Heisenbug-class relation/feature
+  divergence during duration prediction. Disabling MLPG is therefore not a usable
+  mitigation (host is quiet without it too).
+
 **To finish the fix:** the defect is a deterministic, LLP64-specific corruption
 of the HRG item/relation `n`/`p` linkage built during text analysis
 (`src/hrg/cst_{item,relation,utterance}.c`, `src/synth/cst_ffeatures.c`,
