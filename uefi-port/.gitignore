@@ -1,3 +1,4 @@
 esp/
+obj/
 *.log
 flite-uefi/target/
