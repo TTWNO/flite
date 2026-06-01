@@ -490,3 +490,14 @@ wide range of fonts, and flite voices, and books in text, html and
 epub format.  Bard is used as a evaluation of flite's capabilities and
 an example of a serious application using flite.
 
+
+Running flite as a UEFI application (experimental)
+--------------------------------------------------
+
+The uefi-port/ directory contains an experimental build that runs flite
+as a bare UEFI application on the x86_64-unknown-uefi target (no operating
+system), synthesizing text to a .wav written to the EFI System Partition.
+It cross-compiles flite's C with clang and supplies the C runtime from a
+small Rust shim.  See uefi-port/README.md for prerequisites and build/run
+steps.  This is a curiosity and is not part of a normal flite build.
+

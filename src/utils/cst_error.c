@@ -91,7 +91,7 @@ int cst_errmsg(const char *fmt, ...)
 }
 #else
 
-#ifndef WASM32_WASI
+#if !defined(WASM32_WASI) && !defined(DIE_ON_ERROR)
 jmp_buf *cst_errjmp = 0;
 #endif
 
