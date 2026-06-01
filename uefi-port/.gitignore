@@ -1,0 +1,7 @@
+esp/
+obj/
+obj-elf/
+*.log
+flite-uefi/target/
+consumer-demo/target/
+libflite_elf.a
