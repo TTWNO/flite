@@ -1,12 +1,12 @@
-//! Your application: depend on `flite-uefi`, synthesize to PCM, then hand the
-//! samples to your audio driver. Build for the UEFI target with nightly:
+//! Your application: depend on `flite-freestanding`, synthesize to PCM, then hand
+//! the samples to your audio driver. Build for a freestanding target with nightly:
 //!
 //!   cargo build --target x86_64-unknown-uefi
 //!
 //! (No `#![feature(...)]` needed here — that's internal to the library.)
 
 fn main() {
-    let voice = flite_uefi::init().expect("flite voice registration failed");
+    let voice = flite_freestanding::init().expect("flite voice registration failed");
     let wave = voice.synthesize("hello from a separate binary").expect("synthesis failed");
 
     let samples: &[i16] = wave.samples();

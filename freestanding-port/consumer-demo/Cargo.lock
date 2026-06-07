@@ -6,11 +6,11 @@ version = 4
 name = "consumer-demo"
 version = "0.1.0"
 dependencies = [
- "flite-uefi",
+ "flite-freestanding",
 ]
 
 [[package]]
-name = "flite-uefi"
+name = "flite-freestanding"
 version = "0.1.0"
 dependencies = [
  "libm",
