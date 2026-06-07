@@ -2,9 +2,10 @@
 #define _UEFI_SHIM_MATH_H_
 
 
-/* Route these to the shim's uniquely-named implementations. compiler_builtins
-   exports WEAK sqrt/exp/log/pow/sin/cos/fmod/ceil/fabs symbols that otherwise
-   hijack flite's calls (and are wrong on this target), so we bypass them. */
+/* Route these to the shim's uniquely-named implementations. Rust's
+	 `compiler_builtins` crate exports weak sqrt/exp/log/pow/sin/cos/fmod/ceil/fabs symbols that otherwise
+   hijack flite's calls, so we bypass them. 
+	 These introduce strong symbols with explicit naming. */
 #define exp   cstm_exp
 #define log   cstm_log
 #define pow   cstm_pow
