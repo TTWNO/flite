@@ -1,10 +1,10 @@
 [package]
-name = "flite-uefi"
+name = "flite-freestanding"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "flite_uefi"
+name = "flite_freestanding"
 
 [features]
 # By default this crate is no_std + alloc, which is what an embedded

@@ -2,10 +2,10 @@ use std::env;
 
 fn main() {
     // The cross-compiled flite C archive sits one directory up
-    // (`uefi-port/`). We ship two variants because clang's output format
+    // (`freestanding-port/`). We ship two variants because clang's output format
     // depends on the target triple it was invoked with:
     //
-    //   - libflite_uefi.a    — COFF (PE+ x86_64). Used when the consuming
+    //   - libflite_coff.a    — COFF (PE+ x86_64). Used when the consuming
     //                          Rust crate targets x86_64-unknown-uefi
     //                          (the original standalone EFI app path).
     //   - libflite_elf.a     — ELF. Used when the consumer is e.g. a GRUB
@@ -18,14 +18,14 @@ fn main() {
     // Either archive contains the same compiled flite source set plus
     // `math_bridge.c`; the only difference is the object file format.
     // Regenerate them with:
-    //   make -C uefi-port coff  -> libflite_uefi.a   (COFF)
-    //   make -C uefi-port elf   -> libflite_elf.a    (ELF)
+    //   make -C freestanding-port coff  -> libflite_coff.a   (COFF)
+    //   make -C freestanding-port elf   -> libflite_elf.a    (ELF)
     let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
     let target = env::var("TARGET").unwrap_or_default();
     let dir = format!("{manifest}/..");
 
     let (lib_name, lib_filename) = if target == "x86_64-unknown-uefi" {
-        ("flite_uefi", "libflite_uefi.a")
+        ("flite_coff", "libflite_coff.a")
     } else {
         // Everything else (x86_64-unknown-none, x86_64-unknown-linux-gnu
         // for host-side native testing, ...) wants the ELF archive. We

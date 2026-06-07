@@ -1,21 +1,23 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![feature(c_variadic)]
-//! Text-to-speech for `x86_64-unknown-uefi`, built on the CMU flite engine.
+//! Text-to-speech for freestanding x86_64 targets, built on the CMU flite engine.
 //!
-//! This crate links the cross-compiled flite C archive (`libflite_uefi.a`) and
+//! This crate links the cross-compiled flite C archive (`libflite_coff.a` for
+//! `x86_64-unknown-uefi`, `libflite_elf.a` for `x86_64-unknown-none`) and
 //! supplies the C runtime it needs (allocation, `str`/`mem`, math, etc.), then
 //! exposes a small safe API. Synthesis returns 16-bit signed PCM samples that
 //! the host application can hand to its own audio driver.
 //!
 //! ```ignore
-//! let voice = flite_uefi::init().expect("voice");
+//! let voice = flite_freestanding::init().expect("voice");
 //! let wave = voice.synthesize("hello world").expect("synth");
 //! my_audio_driver.play(wave.samples(), wave.sample_rate(), wave.num_channels());
 //! ```
 //!
-//! Build for the UEFI target with a nightly toolchain. The flite C archive must
-//! exist next to this crate (`../libflite_uefi.a`); regenerate it with
-//! `make -C uefi-port coff`. See `uefi-port/README.md`.
+//! Build for a freestanding target with a nightly toolchain. The matching flite C
+//! archive must exist next to this crate (`../libflite_coff.a` / `../libflite_elf.a`);
+//! regenerate them with `make -C freestanding-port coff` / `make -C freestanding-port elf`. See
+//! `freestanding-port/README.md`.
 //!
 //! ## std vs. no_std
 //!

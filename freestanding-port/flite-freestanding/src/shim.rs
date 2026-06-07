@@ -1,5 +1,5 @@
 //! Rust implementation of the C runtime/libc surface that flite's compiled C
-//! archive references. These are linked against `libflite_uefi.a`.
+//! archive references. These are linked against `libflite_coff.a` / `libflite_elf.a`.
 //!
 //! Calling convention: on x86_64-unknown-uefi the C ABI is Win64, which matches
 //! Rust `extern "C"` on this target, so `#[no_mangle] extern "C"` lines up with
@@ -262,85 +262,87 @@ pub unsafe extern "C" fn wcslen(s: *const u16) -> usize {
 // ctype
 // ---------------------------------------------------------------------------
 
+// These mirror C's `<ctype.h>`: the argument is an `int` that must be either
+// EOF (-1) or representable as `unsigned char`. We narrow to `u8` and defer to
+// core's `is_ascii_*`/`to_ascii_*` rather than hand-coding the ranges; values
+// outside the `u8` range (e.g. EOF) classify as false / pass through unchanged,
+// matching the C contract.
+
 #[no_mangle]
 pub extern "C" fn isalnum(c: c_int) -> c_int {
-    let c = c as u32;
-    ((c >= '0' as u32 && c <= '9' as u32)
-        || (c >= 'a' as u32 && c <= 'z' as u32)
-        || (c >= 'A' as u32 && c <= 'Z' as u32)) as c_int
+    u8::try_from(c).is_ok_and(|b| b.is_ascii_alphanumeric()) as c_int
 }
 
 #[no_mangle]
 pub extern "C" fn islower(c: c_int) -> c_int {
-    (c >= 'a' as c_int && c <= 'z' as c_int) as c_int
+    u8::try_from(c).is_ok_and(|b| b.is_ascii_lowercase()) as c_int
 }
 
 #[no_mangle]
 pub extern "C" fn isupper(c: c_int) -> c_int {
-    (c >= 'A' as c_int && c <= 'Z' as c_int) as c_int
+    u8::try_from(c).is_ok_and(|b| b.is_ascii_uppercase()) as c_int
 }
 
 #[no_mangle]
 pub extern "C" fn tolower(c: c_int) -> c_int {
-    if c >= 'A' as c_int && c <= 'Z' as c_int {
-        c + 32
-    } else {
-        c
+    match u8::try_from(c) {
+        Ok(b) => b.to_ascii_lowercase() as c_int,
+        Err(_) => c,
     }
 }
 
 #[no_mangle]
 pub extern "C" fn toupper(c: c_int) -> c_int {
-    if c >= 'a' as c_int && c <= 'z' as c_int {
-        c - 32
-    } else {
-        c
+    match u8::try_from(c) {
+        Ok(b) => b.to_ascii_uppercase() as c_int,
+        Err(_) => c,
     }
 }
 
 // ---------------------------------------------------------------------------
-// math (via libm), accessed through a bit-transport bridge
+// math (via libm) — f64 bridge
 // ---------------------------------------------------------------------------
 //
-// Rust's x86_64-unknown-uefi ABI passes/returns f64 in INTEGER registers (it
-// avoids SSE), but clang (which compiles flite) uses XMM0 per the MS x64 ABI.
-// So a clang `double f(double)` call cannot exchange f64 with a Rust
-// `extern "C"/win64 fn(f64)` — the bits land in the wrong register file.
-// Integer args/returns DO match, so the C side (math_bridge.c, clang) passes
-// the f64 *bit pattern* as u64 to these functions and reinterprets the u64
-// result. f64<->u64 transmute is via to_bits/from_bits.
+// flite is compiled with soft-float (-mno-sse -mno-mmx -mno-x87; see
+// freestanding-port/Makefile), so clang passes/returns `double` in INTEGER registers —
+// the same register file Rust's soft-float UEFI/none ABI uses for f64. The C
+// side (math_bridge.c) hands us `double` and we take `f64` directly.
+//
+// This holds only while flite is soft-float: built with hardware SSE, clang
+// would pass doubles in XMM0 while we read integer registers, corrupting every
+// argument. Keep flite soft-float.
 
 #[no_mangle]
-pub extern "C" fn rust_ceil_bits(x: u64) -> u64 {
-    libm::ceil(f64::from_bits(x)).to_bits()
+pub extern "C" fn rust_ceil(x: f64) -> f64 {
+    libm::ceil(x)
 }
 #[no_mangle]
-pub extern "C" fn rust_exp_bits(x: u64) -> u64 {
-    libm::exp(f64::from_bits(x)).to_bits()
+pub extern "C" fn rust_exp(x: f64) -> f64 {
+    libm::exp(x)
 }
 #[no_mangle]
-pub extern "C" fn rust_fabs_bits(x: u64) -> u64 {
-    libm::fabs(f64::from_bits(x)).to_bits()
+pub extern "C" fn rust_fabs(x: f64) -> f64 {
+    libm::fabs(x)
 }
 #[no_mangle]
-pub extern "C" fn rust_fmod_bits(x: u64, y: u64) -> u64 {
-    libm::fmod(f64::from_bits(x), f64::from_bits(y)).to_bits()
+pub extern "C" fn rust_fmod(x: f64, y: f64) -> f64 {
+    libm::fmod(x, y)
 }
 #[no_mangle]
-pub extern "C" fn rust_log_bits(x: u64) -> u64 {
-    libm::log(f64::from_bits(x)).to_bits()
+pub extern "C" fn rust_log(x: f64) -> f64 {
+    libm::log(x)
 }
 #[no_mangle]
-pub extern "C" fn rust_pow_bits(x: u64, y: u64) -> u64 {
-    libm::pow(f64::from_bits(x), f64::from_bits(y)).to_bits()
+pub extern "C" fn rust_pow(x: f64, y: f64) -> f64 {
+    libm::pow(x, y)
 }
 #[no_mangle]
-pub extern "C" fn rust_sin_bits(x: u64) -> u64 {
-    libm::sin(f64::from_bits(x)).to_bits()
+pub extern "C" fn rust_sin(x: f64) -> f64 {
+    libm::sin(x)
 }
 #[no_mangle]
-pub extern "C" fn rust_sqrt_bits(x: u64) -> u64 {
-    libm::sqrt(f64::from_bits(x)).to_bits()
+pub extern "C" fn rust_sqrt(x: f64) -> f64 {
+    libm::sqrt(x)
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +371,8 @@ pub unsafe extern "C" fn atoi(s: *const c_char) -> c_int {
     atoi_inner(s).clamp(c_int::MIN as i64, c_int::MAX as i64) as c_int
 }
 
+// Hand-rolled rather than str::parse: atoi scans a digit prefix (not the whole
+// string) and saturates on overflow; parse() rejects both.
 unsafe fn atoi_inner(s: *const c_char) -> i64 {
     if s.is_null() {
         return 0;
@@ -405,13 +409,12 @@ unsafe fn atoi_inner(s: *const c_char) -> i64 {
     }
 }
 
-/// Returns the f64 bit pattern (see the math bridge note); the C side
-/// (math_bridge.c `cstm_atof`) reinterprets it. `atof` returns f64, which the
-/// Rust/UEFI ABI would otherwise hand back in the wrong register file.
+/// `atof`: parse a C string to f64. The C side (math_bridge.c `cstm_atof`)
+/// receives this `f64` directly (see the math bridge note above).
 #[no_mangle]
-pub unsafe extern "C" fn rust_atof_bits(s: *const c_char) -> u64 {
+pub unsafe extern "C" fn rust_atof(s: *const c_char) -> f64 {
     if s.is_null() {
-        return 0.0f64.to_bits();
+        return 0.0;
     }
     // Collect a parseable prefix into a small stack buffer, then use Rust's parser.
     let mut buf = [0u8; 64];
@@ -463,7 +466,7 @@ pub unsafe extern "C" fn rust_atof_bits(s: *const c_char) -> u64 {
         Ok(st) => st.parse::<f64>().unwrap_or(0.0),
         Err(_) => 0.0,
     };
-    v.to_bits()
+    v
 }
 
 #[inline]

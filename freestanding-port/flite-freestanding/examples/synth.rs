@@ -1,11 +1,11 @@
 //! Demo: register the built-in voice, synthesize a line, and write the WAV to
-//! the EFI System Partition. Run under QEMU+OVMF via `make -C uefi-port qemu`.
+//! the EFI System Partition. Run under QEMU+OVMF via `make -C freestanding-port qemu`.
 //!
 //!   cargo build --example synth --target x86_64-unknown-uefi
 
 fn main() {
     println!("FLITE-UEFI: start");
-    let voice = match flite_uefi::init() {
+    let voice = match flite_freestanding::init() {
         Some(v) => v,
         None => {
             println!("FAIL: voice registration");
