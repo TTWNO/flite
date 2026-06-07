@@ -1,32 +1,32 @@
-/* Floating-point ABI bridge (compiled by clang for x86_64-unknown-uefi).
+/* Floating-point bridge: routes flite's libm calls to the Rust shim.
  *
- * clang passes/returns `double` in XMM0 (MS x64 ABI). Rust's uefi target keeps
- * floats in INTEGER registers, so a direct clang->Rust `double` call exchanges
- * the value through the wrong register file. Integer args/returns DO match, so
- * here (clang side, native XMM0) we forward the f64 *bit pattern* as a u64 to
- * the Rust shim and reinterpret the u64 result. flite's <math.h>/<stdlib.h>
- * #define sqrt/exp/.../atof to these cstm_* entry points. */
-typedef unsigned long long u64;
+ * flite is built with soft-float (-mno-sse -mno-mmx -mno-x87; see
+ * freestanding-port/Makefile), so clang passes/returns `double` in INTEGER registers —
+ * the same register file Rust's soft-float UEFI/none ABI uses for f64. The C
+ * and Rust ABIs therefore agree, and we forward `double` straight through to
+ * the Rust shim (which implements the math via libm). flite's <math.h>/
+ * <stdlib.h> #define sqrt/exp/.../atof to these cstm_* entry points.
+ *
+ * This relies on flite being soft-float: with hardware SSE, clang would pass
+ * doubles in XMM0 while Rust reads them from integer registers, corrupting
+ * every argument. Keep flite soft-float (see freestanding-port/Makefile). */
 
-extern u64 rust_ceil_bits(u64);
-extern u64 rust_exp_bits(u64);
-extern u64 rust_fabs_bits(u64);
-extern u64 rust_fmod_bits(u64, u64);
-extern u64 rust_log_bits(u64);
-extern u64 rust_pow_bits(u64, u64);
-extern u64 rust_sin_bits(u64);
-extern u64 rust_sqrt_bits(u64);
-extern u64 rust_atof_bits(const char *);
+extern double rust_ceil(double);
+extern double rust_exp(double);
+extern double rust_fabs(double);
+extern double rust_fmod(double, double);
+extern double rust_log(double);
+extern double rust_pow(double, double);
+extern double rust_sin(double);
+extern double rust_sqrt(double);
+extern double rust_atof(const char *);
 
-static inline u64    to_bits(double d) { union { double d; u64 u; } t; t.d = d; return t.u; }
-static inline double of_bits(u64 u)    { union { double d; u64 u; } t; t.u = u; return t.d; }
-
-double cstm_ceil(double x)          { return of_bits(rust_ceil_bits(to_bits(x))); }
-double cstm_exp(double x)           { return of_bits(rust_exp_bits(to_bits(x))); }
-double cstm_fabs(double x)          { return of_bits(rust_fabs_bits(to_bits(x))); }
-double cstm_fmod(double x, double y){ return of_bits(rust_fmod_bits(to_bits(x), to_bits(y))); }
-double cstm_log(double x)           { return of_bits(rust_log_bits(to_bits(x))); }
-double cstm_pow(double x, double y) { return of_bits(rust_pow_bits(to_bits(x), to_bits(y))); }
-double cstm_sin(double x)           { return of_bits(rust_sin_bits(to_bits(x))); }
-double cstm_sqrt(double x)          { return of_bits(rust_sqrt_bits(to_bits(x))); }
-double cstm_atof(const char *s)     { return of_bits(rust_atof_bits(s)); }
+double cstm_ceil(double x)          { return rust_ceil(x); }
+double cstm_exp(double x)           { return rust_exp(x); }
+double cstm_fabs(double x)          { return rust_fabs(x); }
+double cstm_fmod(double x, double y){ return rust_fmod(x, y); }
+double cstm_log(double x)           { return rust_log(x); }
+double cstm_pow(double x, double y) { return rust_pow(x, y); }
+double cstm_sin(double x)           { return rust_sin(x); }
+double cstm_sqrt(double x)          { return rust_sqrt(x); }
+double cstm_atof(const char *s)     { return rust_atof(s); }
