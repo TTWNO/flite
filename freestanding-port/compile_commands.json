@@ -476,7 +476,7 @@
   },
   {
     "command": "cc -c math_bridge.c",
-    "directory": "/home/tait/Documents/flite/uefi-port",
-    "file": "/home/tait/Documents/flite/uefi-port/math_bridge.c"
+    "directory": "/home/tait/Documents/flite/freestanding-port",
+    "file": "/home/tait/Documents/flite/freestanding-port/math_bridge.c"
   }
 ]

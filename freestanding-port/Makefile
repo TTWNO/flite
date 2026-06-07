@@ -1,16 +1,16 @@
 # Makefile for the flite UEFI/freestanding port.
 #
 # Replaces the loose build-*.sh scripts with named targets. Run from this
-# directory (uefi-port/) or from anywhere with `make -C uefi-port <target>`.
+# directory (freestanding-port/) or from anywhere with `make -C freestanding-port <target>`.
 #
 # Common targets (see `make help`):
 #   make            # build both C archives + the synth EFI example
-#   make coff       # cross-compile flite C -> COFF archive (libflite_uefi.a)
-#   make elf        # cross-compile flite C -> ELF  archive (libflite_elf.a)
+#   make coff       # cross-compile flite C -> COFF archive (libflite_coff.a; UEFI x86)
+#   make elf        # cross-compile flite C -> ELF  archive (libflite_elf.a; freestanding x86)
 #   make synth      # build the synth.efi demo (UEFI target)
 #   make qemu       # boot synth.efi under QEMU + OVMF
 #   make native     # build flite natively (host static libs)
-#   make native-test# host sanity check of the C library + voice
+#   make native-test# host sanity check of the C library + voice (used for comparison with other builds to ensure correctness)
 #   make clean      # remove all build intermediates and run artifacts
 #   make distclean  # clean + remove the generated archives + native build
 
@@ -24,7 +24,7 @@ OBJ_DIR      := $(MAKEFILE_DIR)/obj
 ELF_OBJ_DIR  := $(MAKEFILE_DIR)/obj-elf
 COMPILE_COMMANDS := $(MAKEFILE_DIR)/compile_commands.json
 
-COFF_ARCHIVE := $(MAKEFILE_DIR)/libflite_uefi.a
+COFF_ARCHIVE := $(MAKEFILE_DIR)/libflite_coff.a
 ELF_ARCHIVE  := $(MAKEFILE_DIR)/libflite_elf.a
 
 # --- Tools ------------------------------------------------------------------
@@ -51,13 +51,29 @@ NATIVE_LIBDIR := $(REPO_ROOT)/build/x86_64-linux-gnu/lib
 # Common flags shared by the COFF (UEFI) and ELF (freestanding) cross-builds.
 # See build-uefi-c.sh / build-uefi-c-elf.sh history for the rationale behind
 # each one; the per-target differences are spelled out below.
+# -mno-sse -mno-mmx -mno-x87 below: force *true* soft-float in flite's C.
+# clang's UEFI/none targets keep SSE ON by default, so without these flags
+# flite would pass doubles in XMM0 and do internal math with SSE instructions.
+# But Rust's x86_64-unknown-uefi/-none targets use +soft-float precisely
+# because firmware may leave SSE/x87 UNINITIALIZED (using them can fault) — see
+# rust-lang/rust .../spec/targets/x86_64_unknown_uefi.rs. We must NOT assume the
+# firmware enabled the FPU. These flags make clang emit soft-float libcalls
+# (__muldf3/__adddf3/__mulsf3/...) passing values in integer registers, exactly
+# matching Rust's soft-float ABI; the intrinsics are supplied by Rust's
+# compiler_builtins at link time. NOTE: -msoft-float ALONE is wrong here — on
+# x86_64 it falls back to x87, which has the same firmware hazard. Because both
+# clang and Rust now pass f32/f64 in integer registers, every by-value float
+# call across the C<->Rust boundary just works: math_bridge.c forwards `double`
+# straight to libm, and direct f32 calls like feat_set_float() are correct too.
 COMMON_FLAGS := \
 	-fno-builtin \
 	-ffreestanding \
 	-mno-red-zone \
+	-mno-sse -mno-mmx -mno-x87 \
 	-DDIE_ON_ERROR \
 	-DCST_AUDIO_NONE \
 	-DCST_NO_SOCKETS \
+	-include $(MAKEFILE_DIR)/cinclude/setjmp.h \
 	-I$(MAKEFILE_DIR)/cinclude \
 	-I$(REPO_ROOT)/include \
 	-I$(REPO_ROOT)/lang/usenglish \
@@ -66,14 +82,16 @@ COMMON_FLAGS := \
 	-Wno-int-conversion
 
 # COFF / UEFI: clang's UEFI triple emits COFF and uses 16-bit wchar_t.
+# This is because UEFI uses a Windows-like ABI, not Unix-ilke with the longer wide chars.
 COFF_FLAGS := --target=$(UEFI_TARGET) -fshort-wchar $(COMMON_FLAGS)
 
-# ELF / freestanding (GRUB module path): emits ELF objects.
+# ELF / freestanding (currently build primarily for GRUB integration): emits ELF objects.
 #   -mcmodel=large     R_X86_64_64 relocations GRUB's loader accepts.
+# See: `grub/grub-core/kern/x86_64/dl.c:grub_arch_dl_relocate_symbols.c`
 #   -fno-stack-protector  match GRUB (no __stack_chk_fail in its kernel).
 #   -fno-pic           GRUB resolves relocations itself; no GOT/PLT.
-# Default 32-bit wchar_t (no -fshort-wchar) is fine here.
-ELF_FLAGS := --target=x86_64-pc-linux-gnu -mcmodel=large \
+# Default 32-bit wchar_t (no -fshort-wchar) is fine here because GRUB uses Unix-like ABIs.
+ELF_FLAGS := --target=x86_64-unknown-none -mcmodel=large \
 	-fno-stack-protector -fno-pic $(COMMON_FLAGS)
 
 # --- Source / object lists --------------------------------------------------
@@ -134,7 +152,7 @@ $(ELF_ARCHIVE): $(ELF_OBJS)
 # --- Rust builds ------------------------------------------------------------
 # The synth example links the COFF archive; consumer-demo is a separate crate.
 synth: $(COFF_ARCHIVE)
-	$(CARGO) $(NIGHTLY) build --manifest-path $(MAKEFILE_DIR)/flite-uefi/Cargo.toml \
+	$(CARGO) $(NIGHTLY) build --manifest-path $(MAKEFILE_DIR)/flite-freestanding/Cargo.toml \
 		--example synth --target $(UEFI_TARGET)
 
 consumer-demo: $(COFF_ARCHIVE)
@@ -142,7 +160,7 @@ consumer-demo: $(COFF_ARCHIVE)
 		--target $(UEFI_TARGET)
 
 # --- QEMU run ---------------------------------------------------------------
-EFI_APP := $(MAKEFILE_DIR)/flite-uefi/target/$(UEFI_TARGET)/debug/examples/synth.efi
+EFI_APP := $(MAKEFILE_DIR)/flite-freestanding/target/$(UEFI_TARGET)/debug/examples/synth.efi
 ESP_DIR := $(MAKEFILE_DIR)/esp
 QEMU_VARS := /tmp/flite_OVMF_VARS.fd
 
@@ -182,14 +200,14 @@ native-test:
 
 # --- Cleaning ---------------------------------------------------------------
 # clean: wipe everything regenerable EXCEPT the archives (one of which,
-# libflite_uefi.a, is checked in — so removing it here would needlessly dirty
+# libflite_coff.a, is checked in — so removing it here would needlessly dirty
 # the working tree). Use distclean to nuke the archives too.
 clean:
 	rm -rf $(OBJ_DIR) $(ELF_OBJ_DIR) $(ESP_DIR)
 	rm -f $(QEMU_VARS) /tmp/flite-native-test \
 	      /tmp/uefi_build_err.txt /tmp/elf_build_err.txt
-	rm -f $(MAKEFILE_DIR)/*.log $(MAKEFILE_DIR)/flite-uefi/*.log
-	-$(CARGO) clean --manifest-path $(MAKEFILE_DIR)/flite-uefi/Cargo.toml
+	rm -f $(MAKEFILE_DIR)/*.log $(MAKEFILE_DIR)/flite-freestanding/*.log
+	-$(CARGO) clean --manifest-path $(MAKEFILE_DIR)/flite-freestanding/Cargo.toml
 	-$(CARGO) clean --manifest-path $(MAKEFILE_DIR)/consumer-demo/Cargo.toml
 	@echo "clean: removed obj dirs, esp/, cargo target dirs, logs, tmp files"
 
@@ -202,10 +220,10 @@ distclean: clean clean-archives
 
 # --- Help -------------------------------------------------------------------
 help:
-	@echo "flite UEFI port — make targets:"
+	@echo "flite freestanding port — make targets:"
 	@echo "  all (default)  build both C archives + the synth EFI example"
 	@echo "  archives       build coff + elf archives"
-	@echo "  coff           cross-compile flite C -> libflite_uefi.a (COFF, UEFI)"
+	@echo "  coff           cross-compile flite C -> libflite_coff.a (COFF, UEFI)"
 	@echo "  elf            cross-compile flite C -> libflite_elf.a  (ELF, freestanding)"
 	@echo "  synth          build the synth.efi demo (needs nightly + UEFI target)"
 	@echo "  consumer-demo  build the consumer-demo crate"
@@ -213,7 +231,7 @@ help:
 	@echo "  native         build flite natively (host static libs)"
 	@echo "  native-test    host sanity check of the C library + voice"
 	@echo "  clean          remove build intermediates, target dirs, esp/, logs, tmp"
-	@echo "  clean-archives remove libflite_uefi.a and libflite_elf.a"
+	@echo "  clean-archives remove libflite_coff.a and libflite_elf.a"
 	@echo "  distclean      clean + clean-archives + native 'make clean'"
 	@echo ""
 	@echo "Overridable vars: CLANG CARGO NIGHTLY PYTHON OVMF_CODE OVMF_VARS QEMU_TIMEOUT"
